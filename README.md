@@ -119,7 +119,7 @@ Built-in passkeys that automatically sync to all of a user's devices: see [passk
 ## Requirements
 * PHP >= 8.0 with [OpenSSL](http://php.net/manual/en/book.openssl.php) and [Multibyte String](https://www.php.net/manual/en/book.mbstring.php)
 * Browser with [WebAuthn support](https://caniuse.com/webauthn)
-* PHP [Sodium](https://www.php.net/manual/en/book.sodium.php) (or [Sodium Compat](https://github.com/paragonie/sodium_compat)) for [Ed25519](https://en.wikipedia.org/wiki/EdDSA#Ed25519) support
+* PHP [Sodium](https://www.php.net/manual/en/book.sodium.php) (or [Sodium Compat](https://github.com/paragonie/sodium_compat)) for [Ed25519](https://en.wikipedia.org/wiki/EdDSA#Ed25519) support, or OpenSSL with native Ed25519 support (PHP ≥ 8.4)
 
 ## Credits
 
