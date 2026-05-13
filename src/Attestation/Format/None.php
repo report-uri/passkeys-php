@@ -25,6 +25,13 @@ class None extends FormatBase {
      * @param string $clientDataHash
      */
     public function validateAttestation($clientDataHash) {
+        // §8.7 None Attestation Statement Format:
+        // "If attStmt is a properly formed attestation statement,
+        //  verify that attStmt is an empty CBOR map."
+        if (\count($this->_attestationObject['attStmt']) > 0) {
+            throw new WebAuthnException('invalid none attestation: attStmt must be empty', WebAuthnException::INVALID_DATA);
+        }
+
         return true;
     }
 
