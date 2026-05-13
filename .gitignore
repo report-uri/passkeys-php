@@ -2,6 +2,9 @@
 nbproject/
 /index.php
 
+# Composer
+/vendor/
+/composer.lock
 
 # .pem files from FIDO Alliance Metadata Service (MDS)
 _test/rootCertificates/mds/*.pem
