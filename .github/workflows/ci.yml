@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: PHP ${{ matrix.php }} lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.0', '8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-publish
+      - name: Lint src/
+        run: find src -name "*.php" -print0 | xargs -0 -n1 php -l
+      - name: Lint _test/
+        run: find _test -name "*.php" -print0 | xargs -0 -n1 php -l
+      - name: Verify autoload
+        run: |
+          composer dump-autoload
+          php -r "require 'vendor/autoload.php'; new ReportUri\Passkeys\WebAuthn('CI', 'example.com'); echo 'autoload OK', PHP_EOL;"
