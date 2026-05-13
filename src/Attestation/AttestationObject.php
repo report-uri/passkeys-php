@@ -1,13 +1,13 @@
 <?php
 
-namespace lbuchs\WebAuthn\Attestation;
-use lbuchs\WebAuthn\WebAuthnException;
-use lbuchs\WebAuthn\CBOR\CborDecoder;
-use lbuchs\WebAuthn\Binary\ByteBuffer;
+namespace ReportUri\Passkeys\Attestation;
+use ReportUri\Passkeys\WebAuthnException;
+use ReportUri\Passkeys\CBOR\CborDecoder;
+use ReportUri\Passkeys\Binary\ByteBuffer;
 
 /**
  * @author Lukas Buchs
- * @license https://github.com/lbuchs/WebAuthn/blob/master/LICENSE MIT
+ * @license https://github.com/report-uri/passkeys-php/blob/master/LICENSE MIT
  */
 class AttestationObject {
     private $_authenticatorData;

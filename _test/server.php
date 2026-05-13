@@ -2,7 +2,7 @@
 
 /*
  * Copyright (C) 2022 Lukas Buchs
- * license https://github.com/lbuchs/WebAuthn/blob/master/LICENSE MIT
+ * license https://github.com/report-uri/passkeys-php/blob/master/LICENSE MIT
  *
  * Server test script for WebAuthn library. Saves new registrations in session.
  *
@@ -111,7 +111,7 @@ try {
 
         // new Instance of the server library.
         // make sure that $rpId is the domain name.
-        $WebAuthn = new lbuchs\WebAuthn\WebAuthn('WebAuthn Library', $rpId, $formats);
+        $WebAuthn = new ReportUri\Passkeys\WebAuthn('WebAuthn Library', $rpId, $formats);
 
         // add root certificates to validate new registrations
         if (filter_input(INPUT_GET, 'solo')) {

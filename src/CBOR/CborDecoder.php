@@ -1,9 +1,9 @@
 <?php
 
 
-namespace lbuchs\WebAuthn\CBOR;
-use lbuchs\WebAuthn\WebAuthnException;
-use lbuchs\WebAuthn\Binary\ByteBuffer;
+namespace ReportUri\Passkeys\CBOR;
+use ReportUri\Passkeys\WebAuthnException;
+use ReportUri\Passkeys\Binary\ByteBuffer;
 
 /**
  * Modified version of https://github.com/madwizard-thomas/webauthn-server/blob/master/src/Format/CborDecoder.php

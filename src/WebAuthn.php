@@ -1,7 +1,7 @@
 <?php
 
-namespace lbuchs\WebAuthn;
-use lbuchs\WebAuthn\Binary\ByteBuffer;
+namespace ReportUri\Passkeys;
+use ReportUri\Passkeys\Binary\ByteBuffer;
 require_once 'WebAuthnException.php';
 require_once 'Binary/ByteBuffer.php';
 require_once 'Attestation/AttestationObject.php';
@@ -19,7 +19,7 @@ require_once 'CBOR/CborDecoder.php';
 /**
  * WebAuthn
  * @author Lukas Buchs
- * @license https://github.com/lbuchs/WebAuthn/blob/master/LICENSE MIT
+ * @license https://github.com/report-uri/passkeys-php/blob/master/LICENSE MIT
  */
 class WebAuthn {
     // relying party
@@ -539,7 +539,7 @@ class WebAuthn {
             \curl_setopt($ch, CURLOPT_HEADER, false);
             \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             \curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            \curl_setopt($ch, CURLOPT_USERAGENT, 'github.com/lbuchs/WebAuthn - A simple PHP WebAuthn server library');
+            \curl_setopt($ch, CURLOPT_USERAGENT, 'github.com/report-uri/passkeys-php - A PHP WebAuthn (Passkeys) server library');
             $raw = \curl_exec($ch);
             \curl_close($ch);
         } else {
