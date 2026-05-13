@@ -362,6 +362,12 @@ class WebAuthn {
             throw new WebAuthnException('cross-origin request not allowed', WebAuthnException::INVALID_ORIGIN);
         }
 
+        // 6. Verify tokenBinding status matches the TLS connection. We do not
+        //    support Token Binding, so reject status "present" (Level 2 §7.1 Step 6).
+        if (\property_exists($clientData, 'tokenBinding') && \is_object($clientData->tokenBinding) && \property_exists($clientData->tokenBinding, 'status') && $clientData->tokenBinding->status === 'present') {
+            throw new WebAuthnException('token binding not supported', WebAuthnException::INVALID_DATA);
+        }
+
         // Attestation
         $attestationObject = new Attestation\AttestationObject($attestationObject, $this->_formats);
 
@@ -483,6 +489,12 @@ class WebAuthn {
         // Reject cross-origin requests (proposed Level 3 spec §7.2 Step 13).
         if (\property_exists($clientData, 'crossOrigin') && $clientData->crossOrigin === true) {
             throw new WebAuthnException('cross-origin request not allowed', WebAuthnException::INVALID_ORIGIN);
+        }
+
+        // 10. Verify tokenBinding status matches the TLS connection. We do not
+        //     support Token Binding, so reject status "present" (Level 2 §7.2 Step 10).
+        if (\property_exists($clientData, 'tokenBinding') && \is_object($clientData->tokenBinding) && \property_exists($clientData->tokenBinding, 'status') && $clientData->tokenBinding->status === 'present') {
+            throw new WebAuthnException('token binding not supported', WebAuthnException::INVALID_DATA);
         }
 
         // 11. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
