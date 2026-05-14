@@ -11,13 +11,11 @@ use ReportUri\Passkeys\Binary\ByteBuffer;
  */
 class AttestationObject {
     private $_authenticatorData;
-    private $_attestationFormat;
-    private $_attestationFormatName;
 
-    public function __construct($binary , $allowedFormats) {
+    public function __construct($binary) {
         $enc = CborDecoder::decode($binary);
-        // validation
-        if (!\is_array($enc) || !\array_key_exists('fmt', $enc) || !is_string($enc['fmt'])) {
+
+        if (!\is_array($enc) || !\array_key_exists('fmt', $enc) || !\is_string($enc['fmt'])) {
             throw new WebAuthnException('invalid attestation format', WebAuthnException::INVALID_DATA);
         }
 
@@ -29,45 +27,22 @@ class AttestationObject {
             throw new WebAuthnException('invalid attestation format (authData not available)', WebAuthnException::INVALID_DATA);
         }
 
+        // Only the "none" attestation format is supported. The RP always
+        // requests attestation: 'none' in getCreateArgs(), and a spec-compliant
+        // client must deliver fmt: 'none' with an empty attStmt regardless of
+        // which authenticator the user holds (WebAuthn §5.4.7, §8.7).
+        if ($enc['fmt'] !== 'none') {
+            throw new WebAuthnException('invalid attestation format: ' . $enc['fmt'], WebAuthnException::INVALID_DATA);
+        }
+
+        if (\count($enc['attStmt']) !== 0) {
+            throw new WebAuthnException('invalid none attestation: attStmt must be empty', WebAuthnException::INVALID_DATA);
+        }
+
         $this->_authenticatorData = new AuthenticatorData($enc['authData']->getBinaryString());
-        $this->_attestationFormatName = $enc['fmt'];
-
-        // Format ok?
-        if (!in_array($this->_attestationFormatName, $allowedFormats)) {
-            throw new WebAuthnException('invalid atttestation format: ' . $this->_attestationFormatName, WebAuthnException::INVALID_DATA);
-        }
-
-
-        switch ($this->_attestationFormatName) {
-            case 'android-key': $this->_attestationFormat = new Format\AndroidKey($enc, $this->_authenticatorData); break;
-            case 'android-safetynet': $this->_attestationFormat = new Format\AndroidSafetyNet($enc, $this->_authenticatorData); break;
-            case 'apple': $this->_attestationFormat = new Format\Apple($enc, $this->_authenticatorData); break;
-            case 'fido-u2f': $this->_attestationFormat = new Format\U2f($enc, $this->_authenticatorData); break;
-            case 'none': $this->_attestationFormat = new Format\None($enc, $this->_authenticatorData); break;
-            case 'packed': $this->_attestationFormat = new Format\Packed($enc, $this->_authenticatorData); break;
-            case 'tpm': $this->_attestationFormat = new Format\Tpm($enc, $this->_authenticatorData); break;
-            default: throw new WebAuthnException('invalid attestation format: ' . $enc['fmt'], WebAuthnException::INVALID_DATA);
-        }
     }
 
     /**
-     * returns the attestation format name
-     * @return string
-     */
-    public function getAttestationFormatName() {
-        return $this->_attestationFormatName;
-    }
-
-    /**
-     * returns the attestation format class
-     * @return Format\FormatBase
-     */
-    public function getAttestationFormat() {
-        return $this->_attestationFormat;
-    }
-
-    /**
-     * returns the attestation public key in PEM format
      * @return AuthenticatorData
      */
     public function getAuthenticatorData() {
@@ -75,102 +50,8 @@ class AttestationObject {
     }
 
     /**
-     * returns the certificate chain as PEM
-     * @return string|null
-     */
-    public function getCertificateChain() {
-        return $this->_attestationFormat->getCertificateChain();
-    }
-
-    /**
-     * return the certificate issuer as string
-     * @return string
-     */
-    public function getCertificateIssuer() {
-        $pem = $this->getCertificatePem();
-        $issuer = '';
-        if ($pem) {
-            $certInfo = \openssl_x509_parse($pem);
-            if (\is_array($certInfo) && \array_key_exists('issuer', $certInfo) && \is_array($certInfo['issuer'])) {
-
-                $cn = $certInfo['issuer']['CN'] ?? '';
-                $o = $certInfo['issuer']['O'] ?? '';
-                $ou = $certInfo['issuer']['OU'] ?? '';
-
-                if ($cn) {
-                    $issuer .= $cn;
-                }
-                if ($issuer && ($o || $ou)) {
-                    $issuer .= ' (' . trim($o . ' ' . $ou) . ')';
-                } else {
-                    $issuer .= trim($o . ' ' . $ou);
-                }
-            }
-        }
-
-        return $issuer;
-    }
-
-    /**
-     * return the certificate subject as string
-     * @return string
-     */
-    public function getCertificateSubject() {
-        $pem = $this->getCertificatePem();
-        $subject = '';
-        if ($pem) {
-            $certInfo = \openssl_x509_parse($pem);
-            if (\is_array($certInfo) && \array_key_exists('subject', $certInfo) && \is_array($certInfo['subject'])) {
-
-                $cn = $certInfo['subject']['CN'] ?? '';
-                $o = $certInfo['subject']['O'] ?? '';
-                $ou = $certInfo['subject']['OU'] ?? '';
-
-                if ($cn) {
-                    $subject .= $cn;
-                }
-                if ($subject && ($o || $ou)) {
-                    $subject .= ' (' . trim($o . ' ' . $ou) . ')';
-                } else {
-                    $subject .= trim($o . ' ' . $ou);
-                }
-            }
-        }
-
-        return $subject;
-    }
-
-    /**
-     * returns the key certificate in PEM format
-     * @return string
-     */
-    public function getCertificatePem() {
-        return $this->_attestationFormat->getCertificatePem();
-    }
-
-    /**
-     * checks validity of the signature
-     * @param string $clientDataHash
-     * @return bool
-     * @throws WebAuthnException
-     */
-    public function validateAttestation($clientDataHash) {
-        return $this->_attestationFormat->validateAttestation($clientDataHash);
-    }
-
-    /**
-     * validates the certificate against root certificates
-     * @param array $rootCas
-     * @return boolean
-     * @throws WebAuthnException
-     */
-    public function validateRootCertificate($rootCas) {
-        return $this->_attestationFormat->validateRootCertificate($rootCas);
-    }
-
-    /**
      * checks if the RpId-Hash is valid
-     * @param string$rpIdHash
+     * @param string $rpIdHash
      * @return bool
      */
     public function validateRpIdHash($rpIdHash) {
