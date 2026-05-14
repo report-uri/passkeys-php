@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a non-security bug or unexpected behaviour.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **Security issue?** Stop and use private vulnerability reporting instead.
+        > See [SECURITY.md](https://github.com/report-uri/passkeys-php/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+      placeholder: "When calling processCreate() with..., I got X but expected Y."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code or sequence that triggers the bug.
+      render: php
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Library version
+      description: Tag or commit SHA you're running.
+      placeholder: "v2.0.0 or abcdef1"
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: "8.3.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Logs, related links, anything else.
