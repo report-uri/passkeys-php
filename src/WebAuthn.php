@@ -6,14 +6,6 @@ require_once 'WebAuthnException.php';
 require_once 'Binary/ByteBuffer.php';
 require_once 'Attestation/AttestationObject.php';
 require_once 'Attestation/AuthenticatorData.php';
-require_once 'Attestation/Format/FormatBase.php';
-require_once 'Attestation/Format/None.php';
-require_once 'Attestation/Format/AndroidKey.php';
-require_once 'Attestation/Format/AndroidSafetyNet.php';
-require_once 'Attestation/Format/Apple.php';
-require_once 'Attestation/Format/Packed.php';
-require_once 'Attestation/Format/Tpm.php';
-require_once 'Attestation/Format/U2f.php';
 require_once 'CBOR/CborDecoder.php';
 
 /**
@@ -28,9 +20,6 @@ class WebAuthn {
     private $_rpIdHash;
     private $_challenge;
     private $_signatureCounter;
-    private $_caFiles;
-    private $_formats;
-    private $_androidKeyHashes;
 
     /**
      * Initialize a new WebAuthn server
@@ -39,12 +28,11 @@ class WebAuthn {
      * @param bool $useBase64UrlEncoding true to use base64 url encoding for binary data in json objects. Default is a RFC 1342-Like serialized string.
      * @throws WebAuthnException
      */
-    public function __construct($rpName, $rpId, $allowedFormats=null, $useBase64UrlEncoding=false) {
+    public function __construct($rpName, $rpId, $useBase64UrlEncoding=false) {
         $this->_rpName = $rpName;
         $this->_rpId = $rpId;
         $this->_rpIdHash = \hash('sha256', $rpId, true);
         ByteBuffer::$useBase64UrlEncoding = !!$useBase64UrlEncoding;
-        $supportedFormats = array('android-key', 'android-safetynet', 'apple', 'fido-u2f', 'none', 'packed', 'tpm');
 
         if (!\function_exists('\openssl_open')) {
             throw new WebAuthnException('OpenSSL-Module not installed');
@@ -52,59 +40,6 @@ class WebAuthn {
 
         if (!\in_array('SHA256', \array_map('\strtoupper', \openssl_get_md_methods()))) {
             throw new WebAuthnException('SHA256 not supported by this openssl installation.');
-        }
-
-        // default: all format
-        if (!is_array($allowedFormats)) {
-            $allowedFormats = $supportedFormats;
-        }
-        $this->_formats = $allowedFormats;
-
-        // validate formats
-        $invalidFormats = \array_diff($this->_formats, $supportedFormats);
-        if (!$this->_formats || $invalidFormats) {
-            throw new WebAuthnException('invalid formats on construct: ' . implode(', ', $invalidFormats));
-        }
-    }
-
-    /**
-     * add a root certificate to verify new registrations
-     * @param string $path file path of / directory with root certificates
-     * @param array|null $certFileExtensions if adding a direction, all files with provided extension are added. default: pem, crt, cer, der
-     */
-    public function addRootCertificates($path, $certFileExtensions=null) {
-        if (!\is_array($this->_caFiles)) {
-            $this->_caFiles = [];
-        }
-        if ($certFileExtensions === null) {
-            $certFileExtensions = array('pem', 'crt', 'cer', 'der');
-        }
-        $path = \rtrim(\trim($path), '\\/');
-        if (\is_dir($path)) {
-            foreach (\scandir($path) as $ca) {
-                if (\is_file($path . DIRECTORY_SEPARATOR . $ca) && \in_array(\strtolower(\pathinfo($ca, PATHINFO_EXTENSION)), $certFileExtensions)) {
-                    $this->addRootCertificates($path . DIRECTORY_SEPARATOR . $ca);
-                }
-            }
-        } else if (\is_file($path) && !\in_array(\realpath($path), $this->_caFiles)) {
-            $this->_caFiles[] = \realpath($path);
-        }
-    }
-
-    /**
-     * add key hashes for android verification
-     * @param array<string> $hashes
-     * @return void
-     */
-    public function addAndroidKeyHashes($hashes) {
-        if (!\is_array($this->_androidKeyHashes)) {
-            $this->_androidKeyHashes = [];
-        }
-
-        foreach ($hashes as $hash) {
-            if (is_string($hash)) {
-                $this->_androidKeyHashes[] = $hash;
-            }
         }
     }
 
@@ -208,15 +143,7 @@ class WebAuthn {
         $args->publicKey->pubKeyCredParams[] = $tmp;
         unset ($tmp);
 
-        // if there are root certificates added, we need direct attestation to validate
-        // against the root certificate. If there are no root-certificates added,
-        // anonymization ca are also accepted, because we can't validate the root anyway.
-        $attestation = 'indirect';
-        if (\is_array($this->_caFiles)) {
-            $attestation = 'direct';
-        }
-
-        $args->publicKey->attestation = \count($this->_formats) === 1 && \in_array('none', $this->_formats) ? 'none' : $attestation;
+        $args->publicKey->attestation = 'none';
         $args->publicKey->extensions = new \stdClass();
         $args->publicKey->extensions->exts = true;
         $args->publicKey->timeout = $timeout * 1000; // microseconds
@@ -324,12 +251,10 @@ class WebAuthn {
      * @param string|ByteBuffer $challenge binary used challange
      * @param bool $requireUserVerification true, if the device must verify user (e.g. by biometric data or pin)
      * @param bool $requireUserPresent false, if the device must NOT check user presence (e.g. by pressing a button)
-     * @param bool $failIfRootMismatch false, if there should be no error thrown if root certificate doesn't match
-     * @param bool $requireCtsProfileMatch false, if you don't want to check if the device is approved as a Google-certified Android device.
      * @return \stdClass
      * @throws WebAuthnException
      */
-    public function processCreate($clientDataJSON, $attestationObject, $challenge, $requireUserVerification=false, $requireUserPresent=true, $failIfRootMismatch=true, $requireCtsProfileMatch=true) {
+    public function processCreate($clientDataJSON, $attestationObject, $challenge, $requireUserVerification=false, $requireUserPresent=true) {
         $clientDataHash = \hash('sha256', $clientDataJSON, true);
         $clientData = \json_decode($clientDataJSON);
         $challenge = $challenge instanceof ByteBuffer ? $challenge : new ByteBuffer($challenge);
@@ -368,30 +293,14 @@ class WebAuthn {
             throw new WebAuthnException('token binding not supported', WebAuthnException::INVALID_DATA);
         }
 
-        // Attestation
-        $attestationObject = new Attestation\AttestationObject($attestationObject, $this->_formats);
+        // Attestation. The RP requested attestation: 'none', so a compliant
+        // client must deliver fmt: 'none' with an empty attStmt — both
+        // invariants are enforced by AttestationObject's constructor.
+        $attestationObject = new Attestation\AttestationObject($attestationObject);
 
         // 9. Verify that the RP ID hash in authData is indeed the SHA-256 hash of the RP ID expected by the RP.
         if (!$attestationObject->validateRpIdHash($this->_rpIdHash)) {
             throw new WebAuthnException('invalid rpId hash', WebAuthnException::INVALID_RELYING_PARTY);
-        }
-
-        // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature
-        if (!$attestationObject->validateAttestation($clientDataHash)) {
-            throw new WebAuthnException('invalid certificate signature', WebAuthnException::INVALID_SIGNATURE);
-        }
-
-        // Android-SafetyNet: if required, check for Compatibility Testing Suite (CTS).
-        if ($requireCtsProfileMatch && $attestationObject->getAttestationFormat() instanceof Attestation\Format\AndroidSafetyNet) {
-            if (!$attestationObject->getAttestationFormat()->ctsProfileMatch()) {
-                 throw new WebAuthnException('invalid ctsProfileMatch: device is not approved as a Google-certified Android device.', WebAuthnException::ANDROID_NOT_TRUSTED);
-            }
-        }
-
-        // 15. If validation is successful, obtain a list of acceptable trust anchors
-        $rootValid = is_array($this->_caFiles) ? $attestationObject->validateRootCertificate($this->_caFiles) : null;
-        if ($failIfRootMismatch && is_array($this->_caFiles) && !$rootValid) {
-            throw new WebAuthnException('invalid root certificate', WebAuthnException::CERTIFICATE_NOT_TRUSTED);
         }
 
         // 10. Verify that the User Present bit of the flags in authData is set.
@@ -414,19 +323,13 @@ class WebAuthn {
         // prepare data to store for future logins
         $data = new \stdClass();
         $data->rpId = $this->_rpId;
-        $data->attestationFormat = $attestationObject->getAttestationFormatName();
         $data->credentialId = $attestationObject->getAuthenticatorData()->getCredentialId();
         $data->credentialPublicKey = $attestationObject->getAuthenticatorData()->getPublicKeyPem();
-        $data->certificateChain = $attestationObject->getCertificateChain();
-        $data->certificate = $attestationObject->getCertificatePem();
-        $data->certificateIssuer = $attestationObject->getCertificateIssuer();
-        $data->certificateSubject = $attestationObject->getCertificateSubject();
         $data->signatureCounter = $this->_signatureCounter;
         $data->AAGUID = $attestationObject->getAuthenticatorData()->getAAGUID();
-        $data->rootValid = $rootValid;
         $data->userPresent = $userPresent;
         $data->userVerified = $userVerified;
-    	$data->isBackupEligible = $attestationObject->getAuthenticatorData()->getIsBackupEligible();
+        $data->isBackupEligible = $attestationObject->getAuthenticatorData()->getIsBackupEligible();
         $data->isBackedUp = $attestationObject->getAuthenticatorData()->getIsBackup();
         return $data;
     }
@@ -545,92 +448,6 @@ class WebAuthn {
         return true;
     }
 
-    /**
-     * Downloads root certificates from FIDO Alliance Metadata Service (MDS) to a specific folder
-     * https://fidoalliance.org/metadata/
-     * @param string $certFolder Folder path to save the certificates in PEM format.
-     * @param bool $deleteCerts delete certificates in the target folder before adding the new ones.
-     * @return int number of cetificates
-     * @throws WebAuthnException
-     */
-    public function queryFidoMetaDataService($certFolder, $deleteCerts=true) {
-        $url = 'https://mds.fidoalliance.org/';
-        $raw = null;
-        if (\function_exists('curl_init')) {
-            $ch = \curl_init($url);
-            \curl_setopt($ch, CURLOPT_HEADER, false);
-            \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            \curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            \curl_setopt($ch, CURLOPT_USERAGENT, 'github.com/report-uri/passkeys-php - A PHP WebAuthn (Passkeys) server library');
-            $raw = \curl_exec($ch);
-        } else {
-            $raw = \file_get_contents($url);
-        }
-
-        $certFolder = \rtrim(\realpath($certFolder), '\\/');
-        if (!is_dir($certFolder)) {
-            throw new WebAuthnException('Invalid folder path for query FIDO Alliance Metadata Service');
-        }
-
-        if (!\is_string($raw)) {
-            throw new WebAuthnException('Unable to query FIDO Alliance Metadata Service');
-        }
-
-        $jwt = \explode('.', $raw);
-        if (\count($jwt) !== 3) {
-            throw new WebAuthnException('Invalid JWT from FIDO Alliance Metadata Service');
-        }
-
-        if ($deleteCerts) {
-            foreach (\scandir($certFolder) as $ca) {
-                if (\substr($ca, -4) === '.pem') {
-                    if (\unlink($certFolder . DIRECTORY_SEPARATOR . $ca) === false) {
-                        throw new WebAuthnException('Cannot delete certs in folder for FIDO Alliance Metadata Service');
-                    }
-                }
-            }
-        }
-
-        list($header, $payload, $hash) = $jwt;
-        $payload = Binary\ByteBuffer::fromBase64Url($payload)->getJson();
-
-        $count = 0;
-        if (\is_object($payload) && \property_exists($payload, 'entries') && \is_array($payload->entries)) {
-            foreach ($payload->entries as $entry) {
-                if (\is_object($entry) && \property_exists($entry, 'metadataStatement') && \is_object($entry->metadataStatement)) {
-                    $description = $entry->metadataStatement->description ?? null;
-                    $attestationRootCertificates = $entry->metadataStatement->attestationRootCertificates ?? null;
-
-                    if ($description && $attestationRootCertificates) {
-
-                        // create filename
-                        $certFilename = \preg_replace('/[^a-z0-9]/i', '_', $description);
-                        $certFilename = \trim(\preg_replace('/\_{2,}/i', '_', $certFilename),'_') . '.pem';
-                        $certFilename = \strtolower($certFilename);
-
-                        // add certificate
-                        $certContent = $description . "\n";
-                        $certContent .= \str_repeat('-', \mb_strlen($description)) . "\n";
-
-                        foreach ($attestationRootCertificates as $attestationRootCertificate) {
-                            $attestationRootCertificate = \str_replace(["\n", "\r", ' '], '', \trim($attestationRootCertificate));
-                            $count++;
-                            $certContent .= "\n-----BEGIN CERTIFICATE-----\n";
-                            $certContent .= \chunk_split($attestationRootCertificate, 64, "\n");
-                            $certContent .= "-----END CERTIFICATE-----\n";
-                        }
-
-                        if (\file_put_contents($certFolder . DIRECTORY_SEPARATOR . $certFilename, $certContent) === false) {
-                            throw new WebAuthnException('unable to save certificate from FIDO Alliance Metadata Service');
-                        }
-                    }
-                }
-            }
-        }
-
-        return $count;
-    }
-
     // -----------------------------------------------
     // PRIVATE
     // -----------------------------------------------
@@ -642,10 +459,6 @@ class WebAuthn {
      * @throws WebAuthnException
      */
     private function _checkOrigin($origin) {
-        if (str_starts_with($origin, 'android:apk-key-hash:')) {
-            return $this->_checkAndroidKeyHashes($origin);
-        }
-
         // https://www.w3.org/TR/webauthn/#rp-id
 
         // The origin's scheme must be https
@@ -663,19 +476,6 @@ class WebAuthn {
             return true;
         }
         return \str_ends_with(\strtolower($host), '.' . \strtolower($this->_rpId));
-    }
-
-    /**
-     * checks if the origin value contains a known android key hash
-     * @param string $origin
-     * @return boolean
-     */
-    private function _checkAndroidKeyHashes($origin) {
-        $parts = explode('android:apk-key-hash:', $origin);
-        if (count($parts) !== 2) {
-            return false;
-        }
-        return in_array($parts[1], $this->_androidKeyHashes, true);
     }
 
     /**

@@ -58,30 +58,6 @@ try {
 
     if ($fn !== 'getStoredDataHtml') {
 
-        // Formats
-        $formats = [];
-        if (filter_input(INPUT_GET, 'fmt_android-key')) {
-            $formats[] = 'android-key';
-        }
-        if (filter_input(INPUT_GET, 'fmt_android-safetynet')) {
-            $formats[] = 'android-safetynet';
-        }
-        if (filter_input(INPUT_GET, 'fmt_apple')) {
-            $formats[] = 'apple';
-        }
-        if (filter_input(INPUT_GET, 'fmt_fido-u2f')) {
-            $formats[] = 'fido-u2f';
-        }
-        if (filter_input(INPUT_GET, 'fmt_none')) {
-            $formats[] = 'none';
-        }
-        if (filter_input(INPUT_GET, 'fmt_packed')) {
-            $formats[] = 'packed';
-        }
-        if (filter_input(INPUT_GET, 'fmt_tpm')) {
-            $formats[] = 'tpm';
-        }
-
         $rpId = 'localhost';
         if (filter_input(INPUT_GET, 'rpId')) {
             $rpId = filter_input(INPUT_GET, 'rpId', FILTER_VALIDATE_DOMAIN);
@@ -111,33 +87,7 @@ try {
 
         // new Instance of the server library.
         // make sure that $rpId is the domain name.
-        $WebAuthn = new ReportUri\Passkeys\WebAuthn('WebAuthn Library', $rpId, $formats);
-
-        // add root certificates to validate new registrations
-        if (filter_input(INPUT_GET, 'solo')) {
-            $WebAuthn->addRootCertificates('rootCertificates/solo.pem');
-            $WebAuthn->addRootCertificates('rootCertificates/solokey_f1.pem');
-            $WebAuthn->addRootCertificates('rootCertificates/solokey_r1.pem');
-        }
-        if (filter_input(INPUT_GET, 'apple')) {
-            $WebAuthn->addRootCertificates('rootCertificates/apple.pem');
-        }
-        if (filter_input(INPUT_GET, 'yubico')) {
-            $WebAuthn->addRootCertificates('rootCertificates/yubico.pem');
-        }
-        if (filter_input(INPUT_GET, 'hypersecu')) {
-            $WebAuthn->addRootCertificates('rootCertificates/hypersecu.pem');
-        }
-        if (filter_input(INPUT_GET, 'google')) {
-            $WebAuthn->addRootCertificates('rootCertificates/globalSign.pem');
-            $WebAuthn->addRootCertificates('rootCertificates/googleHardware.pem');
-        }
-        if (filter_input(INPUT_GET, 'microsoft')) {
-            $WebAuthn->addRootCertificates('rootCertificates/microsoftTpmCollection.pem');
-        }
-        if (filter_input(INPUT_GET, 'mds')) {
-            $WebAuthn->addRootCertificates('rootCertificates/mds');
-        }
+        $WebAuthn = new ReportUri\Passkeys\WebAuthn('WebAuthn Library', $rpId);
 
     }
 
@@ -208,7 +158,7 @@ try {
         // in this example we store it in the php session.
         // Normaly you have to store the data in a database connected
         // with the user name.
-        $data = $WebAuthn->processCreate($clientDataJSON, $attestationObject, $challenge, $userVerification === 'required', true, false);
+        $data = $WebAuthn->processCreate($clientDataJSON, $attestationObject, $challenge, $userVerification === 'required', true);
 
         // add user infos
         $data->userId = $userId;
@@ -221,9 +171,6 @@ try {
         $_SESSION['registrations'][] = $data;
 
         $msg = 'registration success.';
-        if ($data->rootValid === false) {
-            $msg = 'registration ok, but certificate does not match any of the selected root ca.';
-        }
 
         $return = new stdClass();
         $return->success = true;
@@ -329,35 +276,6 @@ try {
 
         header('Content-Type: text/html');
         print $html;
-
-    // ------------------------------------
-    // get root certs from FIDO Alliance Metadata Service
-    // ------------------------------------
-
-    } else if ($fn === 'queryFidoMetaDataService') {
-
-        $mdsFolder = 'rootCertificates/mds';
-        $success = false;
-        $msg = null;
-
-        // fetch only 1x / 24h
-        $lastFetch = \is_file($mdsFolder .  '/lastMdsFetch.txt') ? \strtotime(\file_get_contents($mdsFolder .  '/lastMdsFetch.txt')) : 0;
-        if ($lastFetch + (3600*48) < \time()) {
-            $cnt = $WebAuthn->queryFidoMetaDataService($mdsFolder);
-            $success = true;
-            \file_put_contents($mdsFolder .  '/lastMdsFetch.txt', date('r'));
-            $msg = 'successfully queried FIDO Alliance Metadata Service - ' . $cnt . ' certificates downloaded.';
-
-        } else {
-            $msg = 'Fail: last fetch was at ' . date('r', $lastFetch) . ' - fetch only 1x every 48h';
-        }
-
-        $return = new stdClass();
-        $return->success = $success;
-        $return->msg = $msg;
-
-        header('Content-Type: application/json');
-        print(json_encode($return));
     }
 
 } catch (Throwable $ex) {

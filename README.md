@@ -12,13 +12,24 @@ Upstream is effectively dormant. A pen test of Report URI's passkey integration 
 
 ### Security improvements vs lbuchs/WebAuthn v2.2.0
 
+- **Attestation removed entirely** — only `fmt: 'none'` with an empty `attStmt` is accepted. `getCreateArgs()` always requests `attestation: 'none'` from the browser, which is required by spec to strip the attestation statement regardless of which authenticator the user holds. All TPM / Packed / U2F / Android-Key / SafetyNet / Apple format handling has been deleted, along with the FIDO MDS plumbing and root-CA validation. The library is positioned for SaaS-style passkey auth where the RP only needs to know the user controls a credential bound to the RP — not which authenticator they used.
 - **Tighter origin check** — the previous regex-based RP-ID match treated the RP ID as a substring suffix (e.g. RP `example.com` would match host `evil-example.com`). Now an exact match or true subdomain (RP ID preceded by a dot).
 - **Cross-origin rejection** — `processCreate` / `processGet` now reject ceremonies where `clientDataJSON.crossOrigin === true` (WebAuthn Level 3 §7.1 Step 10, §7.2 Step 13).
-- **`none` attestation hardening** — the `attStmt` for the `none` attestation format must be an empty CBOR map (WebAuthn §8.7). Non-empty maps are now rejected.
 - **Backup flag validation** — `AuthenticatorData` now rejects flag bytes where Backup State (BS) is set without Backup Eligible (BE), per spec.
 - **Token Binding rejection** — `clientDataJSON.tokenBinding.status === 'present'` is rejected (WebAuthn Level 2 §7.1 Step 6, §7.2 Step 10), since this library does not implement Token Binding.
 
 Each fix is a separate commit on `main` for easy auditing.
+
+### Migrating from a build with attestation
+
+If you previously consumed `lbuchs/WebAuthn` (or an earlier build of this fork) and used attestation:
+
+- The constructor no longer accepts an `$allowedFormats` argument. Drop the third positional argument: `new WebAuthn($rpName, $rpId, $useBase64UrlEncoding = false)`.
+- `addRootCertificates()`, `addAndroidKeyHashes()`, and `queryFidoMetaDataService()` have been removed. Delete any calls to them.
+- `processCreate()` no longer accepts `$failIfRootMismatch` or `$requireCtsProfileMatch`. Drop those arguments.
+- The `processCreate()` result no longer carries `attestationFormat`, `certificate`, `certificateChain`, `certificateIssuer`, `certificateSubject`, or `rootValid`. Remove any code that reads those fields.
+- Native Android app origins (`android:apk-key-hash:…`) are no longer recognised; only `https` origins (and `http://localhost` for development) are accepted. This affects only relying parties that ship a **native Android app** which calls the platform FIDO2 / Credential Manager API in-process — those calls produce `android:apk-key-hash:` origins. Browsers on Android (Chrome, Firefox, Edge, …) and any WebView-based flow still produce normal `https://` origins and work unchanged.
+- The `WebAuthnException::CERTIFICATE_NOT_TRUSTED` and `WebAuthnException::ANDROID_NOT_TRUSTED` error-code constants have been removed. Both were thrown only from attestation paths that no longer exist. Update any `catch` blocks that branch on `$e->getCode()`.
 
 ## Installation
 
@@ -36,17 +47,6 @@ $server = new WebAuthn('My App', 'example.com');
 
 ## Manual
 See [`_test/`](_test/) for a simple working demo. The `server.php` + `client.html` pair exercises registration and login end-to-end.
-
-### Supported attestation statement formats
-* android-key
-* android-safetynet
-* apple
-* fido-u2f
-* none
-* packed
-* tpm
-
-> This library supports authenticators which are signed with an X.509 certificate or which are self-attested. ECDAA is not supported.
 
 ## Workflow
 
@@ -75,20 +75,6 @@ See [`_test/`](_test/) for a simple working demo. The `server.php` + `client.htm
             '------------------------->      processGet
                                                  |
           alert ok or fail      <----------------'
-
-## Attestation
-Typically, when someone logs in, you only need to confirm that they are using the same device they used during registration — in that case you do not require attestation. If you need stronger guarantees (e.g. requiring a specific authenticator model) you can verify authenticity through direct attestation.
-
-### no attestation
-Just verify that the device is the same device used at registration. Use `'none'` attestation if you only select `none` as the format.
-
-> Probably what you want for a public website with passkey login.
-
-### indirect attestation
-The browser may replace the AAGUID and attestation statement with a more privacy-friendly or more easily verifiable version (e.g. via an anonymization CA). You cannot validate against any root CA if the browser uses an anonymization certificate. This library sets attestation to `indirect` if you select multiple formats but don't provide any root CA.
-
-### direct attestation
-The browser provides data about the identificator device, so the device can be identified uniquely. The browser may warn the user about this. This library sets attestation to `direct` if you select multiple formats and provide root CAs.
 
 ## Passkeys / Client-side discoverable Credentials
 A Client-side discoverable Credential Source is a public-key credential source whose private key is stored in the authenticator, client or client device. This requires a resident-credential-capable authenticator (FIDO2 hardware, not older U2F).
